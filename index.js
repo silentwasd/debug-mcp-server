@@ -7,6 +7,7 @@ import { z } from "zod";
 
 const PORT = process.env.PORT ?? 3000;
 const HOST = process.env.HOST ?? "127.0.0.1";
+const ALLOWED_HOSTS = process.env.ALLOWED_HOSTS?.split(",").map(h => h.trim()) ?? [];
 
 // Фабрика — каждая сессия получает свой экземпляр McpServer
 function createServer() {
@@ -93,7 +94,10 @@ function createServer() {
 // Хранилище активных транспортов по sessionId
 const transports = new Map();
 
-const app = createMcpExpressApp({ host: HOST });
+const app = createMcpExpressApp({
+  host: HOST,
+  ...(ALLOWED_HOSTS.length ? { allowedHosts: ALLOWED_HOSTS } : {}),
+});
 
 // Добавляем логирование всех входящих запросов
 app.use((req, _res, next) => {
