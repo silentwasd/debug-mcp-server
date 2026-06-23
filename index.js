@@ -10,7 +10,7 @@ const HOST = process.env.HOST ?? "127.0.0.1";
 const ALLOWED_HOSTS = process.env.ALLOWED_HOSTS?.split(",").map(h => h.trim()) ?? [];
 
 // Фабрика — каждая сессия получает свой экземпляр McpServer
-function createServer() {
+function createServer(sessionId) {
   const server = new McpServer({ name: "debug-mcp-server", version: "1.0.0" });
 
   // Возвращает все переданные параметры + заголовки запроса
@@ -33,6 +33,7 @@ function createServer() {
           params,
           meta: extra?._meta ?? null,
           sessionId: extra?.sessionId ?? null,
+          requestHeaders: sessionHeaders.get(extra?.sessionId) ?? null,
         }, null, 2),
       }],
     })
@@ -83,6 +84,7 @@ function createServer() {
           uptime_seconds: process.uptime(),
           memory_mb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
           sessionId: extra?.sessionId ?? null,
+          requestHeaders: sessionHeaders.get(extra?.sessionId) ?? null,
         }, null, 2),
       }],
     })
@@ -91,8 +93,9 @@ function createServer() {
   return server;
 }
 
-// Хранилище активных транспортов по sessionId
+// Хранилище активных транспортов и заголовков по sessionId
 const transports = new Map();
+const sessionHeaders = new Map();
 
 const app = createMcpExpressApp({
   host: HOST,
@@ -127,6 +130,7 @@ app.post("/mcp", async (req, res) => {
         onsessioninitialized: (sid) => {
           console.log(`[session] initialized: ${sid}`);
           transports.set(sid, transport);
+          sessionHeaders.set(sid, req.headers);
         },
       });
 
@@ -135,10 +139,11 @@ app.post("/mcp", async (req, res) => {
         if (sid) {
           console.log(`[session] closed: ${sid}`);
           transports.delete(sid);
+          sessionHeaders.delete(sid);
         }
       };
 
-      await createServer().connect(transport);
+      await createServer(transport.sessionId).connect(transport);
       await transport.handleRequest(req, res, req.body);
       return;
     }
